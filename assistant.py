@@ -95,8 +95,32 @@ def get_clipboard():
         print('No clipboard text to copy.')
         return None
 
-prompt = input('User: ')
-function_reply = call_function(prompt)
-print(f'Function call: {function_reply}')
-reply = ask_llama(prompt)
-print(reply)
+system_message = (
+    "You are a multimodal AI voice assistant. The user may or may not have attached a photo for context, which has been processed into a highly detailed text description. "
+    "This description will accompany the transcribed voice prompt. Generate the most useful and factual response possible, carefully considering all previously generated text "
+    "before adding new information. Do not request or expect images; use the context provided if available. Ensure your responses are relevant and useful in the conversation. "
+    "Make your responses clear and concise, avoiding verbosity."
+)
+
+convo = [{'role': 'system', 'content': system_message}]
+
+while True:
+    prompt = input('USER: ')
+    call = call_function(prompt)
+
+    if 'take screenshot' in call.lower():
+        print('Taking Screenshot')
+        screenshot()
+        visual_context = use_vision(prompt, 'screenshot.jpg')
+
+    elif 'capture webcam' in call.lower():
+        print('Capuring Webcam')
+        capture_webcam()
+        visual_context = use_vision(prompt, 'webcam.jpg')
+
+    elif 'extract clipboard' in call.lower():
+        print('Copying Clipboard')
+        context = get_clipboard()
+        prompt = f'{prompt}\n\n CLIPBOARD CONTENT: {context}'
+    
+
