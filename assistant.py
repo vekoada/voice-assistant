@@ -1,14 +1,18 @@
 from groq import Groq
 import google.generativeai as googai
+from openai import OpenAI
 import json
 import pyperclip
 import cv2
 from PIL import ImageGrab, Image
+import pyaudio
 
 with open("API Keys.json") as file:
     keys = json.load(file)
 
 groq_client = Groq(api_key=keys["Groq"])
+
+openai_client = OpenAI(api_key=keys["OpenAI"])
 
 googai.configure(api_key=keys["Google"])
 googai_config = {
@@ -86,7 +90,6 @@ def capture_webcam():
 
     _, frame = webcam.read()
     cv2.imwrite(filename='webcam.jpg', img=frame)
-    
 
 def get_clipboard():
     content = pyperclip.paste()
@@ -95,6 +98,25 @@ def get_clipboard():
     else:
         print('No clipboard text to copy.')
         return None
+
+def speak(text):
+    player_stream = pyaudio.PyAudio().open(format=pyaudio.paInt16, channels=1, rate=24000, output=True)
+    stream_start = False
+
+    with openai_client.audio.speech.with_streaming_response.create(
+        model='tts-1',
+        voice='onyx',
+        response_format='pcm',
+        input=text,
+    ) as response:
+        silence_threshold = 0.01
+        for chunk in response.iter_bytes(chunk_size=1024):
+            if stream_start:
+                player_stream.write(chunk)
+            else:
+                if max(chunk) > silence_threshold:
+                    player_stream.write(chunk)
+                    stream_start = True
 
 system_message = (
     "You are a multimodal AI voice assistant. The user may or may not have attached a photo for context, which has been processed into a highly detailed text description. "
@@ -132,4 +154,5 @@ while True:
     
     reply = ask_llama(prompt, visual_context)
     print(reply)
+    speak(reply)
 
