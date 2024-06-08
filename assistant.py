@@ -40,7 +40,7 @@ goog_model = googai.GenerativeModel('gemini-1.5-flash-latest',
                                     safety_settings=googai_safety_config)
 
 def use_vision(prompt, photo_path):
-    image = Image.ioen(photo_path)
+    image = Image.open(photo_path)
     prompt = (
     "You are the vision analysis AI that extracts semantic meaning from images to provide context for another AI, which will respond to the user. "
     "Do not respond directly to the user. Instead, analyze the user-provided image and extract all relevant details and context based on the user's prompt. "
@@ -49,12 +49,13 @@ def use_vision(prompt, photo_path):
     reply = goog_model.generate_content([prompt, image])
     return reply.text
 
-
-
-def ask_llama(prompt):
-    convo = [{'role': 'user', 'content': prompt}]
-    completion = groq_client.chat.completions.create(messages=convo, model='llama3-70b-8192')
+def ask_llama(prompt, image_context):
+    if image_context:
+        prompt = f'USER PROMPT: {prompt}\n\n    IMAGE CONTEXT: {image_context}'
+    conversation.append({'role': 'user', 'content': prompt})
+    completion = groq_client.chat.completions.create(messages=conversation, model='llama3-70b-8192')
     reply = completion.choices[0].message
+    conversation.append(reply)
 
     return reply.content
 
@@ -78,7 +79,6 @@ def call_function(prompt):
 def screenshot():
      ImageGrab.grab().convert('RGB').save(fp='screenshot.jpg', quality=15) #Take img, convert to RGB format, save to path at 15% quality for faster inference
 
-webcam = cv2.VideoCapture(0)
 def capture_webcam():
     if not webcam.isOpened():
         print('Error: Camera did not successfully open')
@@ -86,6 +86,7 @@ def capture_webcam():
 
     _, frame = webcam.read()
     cv2.imwrite(filename='webcam.jpg', img=frame)
+    
 
 def get_clipboard():
     content = pyperclip.paste()
@@ -102,7 +103,7 @@ system_message = (
     "Make your responses clear and concise, avoiding verbosity."
 )
 
-convo = [{'role': 'system', 'content': system_message}]
+conversation = [{'role': 'system', 'content': system_message}]
 
 while True:
     prompt = input('USER: ')
@@ -114,13 +115,21 @@ while True:
         visual_context = use_vision(prompt, 'screenshot.jpg')
 
     elif 'capture webcam' in call.lower():
+        webcam = cv2.VideoCapture(0)
         print('Capuring Webcam')
         capture_webcam()
+        webcam.release()
         visual_context = use_vision(prompt, 'webcam.jpg')
 
     elif 'extract clipboard' in call.lower():
         print('Copying Clipboard')
         context = get_clipboard()
         prompt = f'{prompt}\n\n CLIPBOARD CONTENT: {context}'
+        visual_context = None
+
+    else:
+        visual_context = None
     
+    reply = ask_llama(prompt, visual_context)
+    print(reply)
 
