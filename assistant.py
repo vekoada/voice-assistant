@@ -1,5 +1,7 @@
 from groq import Groq
 import json
+import pyperclip
+import cv2
 from PIL import ImageGrab
 
 with open("API Keys.json") as file:
@@ -31,8 +33,27 @@ def call_function(prompt):
 
     return reply.content
 
+### Function Options
 def screenshot():
      ImageGrab.grab().convert('RGB').save(fp='screenshot.jpg', quality=15) #Take img, convert to RGB format, save to path at 15% quality for faster inference
+
+webcam = cv2.VideoCapture(0)
+
+def capture_webcam():
+    if not webcam.isOpened():
+        print('Error: Camera did not successfully open')
+        exit()
+
+    _, frame = webcam.read()
+    cv2.imwrite(filename='webcam.jpg', img=frame)
+
+def get_clipboard():
+    content = pyperclip.paste()
+    if isinstance(content, str):
+        return content
+    else:
+        print('No clipboard text to copy.')
+        return None
 
 prompt = input('User: ')
 function_reply = call_function(prompt)
