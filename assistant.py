@@ -48,6 +48,8 @@ goog_model = googai.GenerativeModel('gemini-1.5-flash-latest',
                                     generation_config=googai_config,
                                     safety_settings=googai_safety_config)
 
+webcam = cv2.VideoCapture(0)
+
 def use_vision(prompt, photo_path):
     image = Image.open(photo_path)
     prompt = (
@@ -125,14 +127,12 @@ def speak(text):
                     stream_start = True
 
 # Speech-to-text functionality
-cores = os.cpu_count() // 2
+#cores = os.cpu_count() // 2
 whisper_size = 'base'
 stt_model = WhisperModel(
     whisper_size,
     device='cpu',
-    compute_type='int8',
-    cpu_thread=cores,
-    num_workers=cores,
+    compute_type='int8'
 )
 
 def wav_to_text(audio_path):
@@ -145,6 +145,42 @@ wake_word = "Worko"
 r = sr.Recognizer()
 source = sr.Microphone()
 
+def callback(recognizer, audio):
+    prompt_audio_path = 'prompt.wav'
+    with open(prompt_audio_path, 'wb') as f:
+        f.write(audio.get_wav_data())
+
+    prompt_text = wav_to_text(prompt_audio_path)
+    clean_prompt = extract_prompt(prompt_text, wake_word)
+    
+    if clean_prompt:
+        print(f"USER: {clean_prompt}")
+        call = call_function(clean_prompt)
+
+        if 'take screenshot' in call.lower():
+            print('Taking Screenshot')
+            screenshot()
+            visual_context = use_vision(clean_prompt, 'screenshot.jpg')
+
+        elif 'capture webcam' in call.lower():
+            print('Capuring Webcam')
+            capture_webcam()
+            visual_context = use_vision(clean_prompt, 'webcam.jpg')
+            webcam.release()
+
+        elif 'extract clipboard' in call.lower():
+            print('Copying Clipboard')
+            context = get_clipboard()
+            clean_prompt = f'{clean_prompt}\n\n CLIPBOARD CONTENT: {context}'
+            visual_context = None
+
+        else:
+            visual_context = None
+        
+        reply = ask_llama(clean_prompt, visual_context)
+        print(f"ASSISTANT: {reply}")
+        speak(reply)
+
 def start_listening():
     with source as s:
         r.adjust_for_ambient_noise(s, duration=2)
@@ -154,6 +190,16 @@ def start_listening():
     while True:
         time.sleep(0.5)
 
+def extract_prompt(transcribed_text, wake_word):
+    pattern = rf"\b{re.escape(wake_word)}[\s,.?!]*([A-Za-z0-9].*)"
+    match = re.search(pattern, transcribed_text, re.IGNORECASE)
+
+    if match:
+        prompt = match.group(1).strip()
+        return prompt
+    else:
+        return None
+
 system_message = (
     "You are a multimodal AI voice assistant. The user may or may not have attached a photo for context, which has been processed into a highly detailed text description. "
     "This description will accompany the transcribed voice prompt. Generate the most useful and factual response possible, carefully considering all previously generated text "
@@ -162,33 +208,5 @@ system_message = (
 )
 
 conversation = [{'role': 'system', 'content': system_message}]
-
-while True:
-    prompt = input('USER: ')
-    call = call_function(prompt)
-
-    if 'take screenshot' in call.lower():
-        print('Taking Screenshot')
-        screenshot()
-        visual_context = use_vision(prompt, 'screenshot.jpg')
-
-    elif 'capture webcam' in call.lower():
-        webcam = cv2.VideoCapture(0)
-        print('Capuring Webcam')
-        capture_webcam()
-        webcam.release()
-        visual_context = use_vision(prompt, 'webcam.jpg')
-
-    elif 'extract clipboard' in call.lower():
-        print('Copying Clipboard')
-        context = get_clipboard()
-        prompt = f'{prompt}\n\n CLIPBOARD CONTENT: {context}'
-        visual_context = None
-
-    else:
-        visual_context = None
-    
-    reply = ask_llama(prompt, visual_context)
-    print(reply)
-    speak(reply)
-
+       
+start_listening()
