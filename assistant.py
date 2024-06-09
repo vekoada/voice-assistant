@@ -1,11 +1,16 @@
 from groq import Groq
 import google.generativeai as googai
 from openai import OpenAI
+from faster_whisper import WhisperModel
+import speech_recognition as sr
 import json
 import pyperclip
 import cv2
 from PIL import ImageGrab, Image
 import pyaudio
+import os
+import time
+import re
 
 with open("API Keys.json") as file:
     keys = json.load(file)
@@ -99,6 +104,7 @@ def get_clipboard():
         print('No clipboard text to copy.')
         return None
 
+# Text-to-speech functionality
 def speak(text):
     player_stream = pyaudio.PyAudio().open(format=pyaudio.paInt16, channels=1, rate=24000, output=True)
     stream_start = False
@@ -117,6 +123,36 @@ def speak(text):
                 if max(chunk) > silence_threshold:
                     player_stream.write(chunk)
                     stream_start = True
+
+# Speech-to-text functionality
+cores = os.cpu_count() // 2
+whisper_size = 'base'
+stt_model = WhisperModel(
+    whisper_size,
+    device='cpu',
+    compute_type='int8',
+    cpu_thread=cores,
+    num_workers=cores,
+)
+
+def wav_to_text(audio_path):
+    segments, _ = stt_model.transcribe(audio_path)
+    text = ''.join(segment.text for segment in segments)
+    return text
+
+wake_word = "Worko"
+
+r = sr.Recognizer()
+source = sr.Microphone()
+
+def start_listening():
+    with source as s:
+        r.adjust_for_ambient_noise(s, duration=2)
+    print(f"\nSay", wake_word, f"followed by your prompt. \n")
+    r.listen_in_background(source, callback) 
+    
+    while True:
+        time.sleep(0.5)
 
 system_message = (
     "You are a multimodal AI voice assistant. The user may or may not have attached a photo for context, which has been processed into a highly detailed text description. "
